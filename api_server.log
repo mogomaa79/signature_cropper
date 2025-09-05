@@ -1,0 +1,7 @@
+2025-09-05 09:33:12,141 - INFO - Gemini 2.5 Pro with thinking initialized successfully
+2025-09-05 09:33:12,141 - INFO - Tesseract found at: /usr/bin/tesseract
+INFO:     Started server process [3469959]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     127.0.0.1:58360 - "GET /health HTTP/1.1" 200 OK
