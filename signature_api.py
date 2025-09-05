@@ -523,26 +523,98 @@ class GeminiZoneClassifier:
                 logger.warning(f"Failed to build zone from candidate: {e}")
             return None
 
+    def _fuzzy_match(self, text: str, keyword: str) -> bool:
+        """Fuzzy matching for OCR errors and variations"""
+        text = text.lower().strip()
+        keyword = keyword.lower().strip()
+        
+        # Exact match (including substring)
+        if keyword in text or text in keyword:
+            return True
+        
+        # Handle very short text (likely OCR fragments)
+        if len(text) < 3:
+            return False
+            
+        # Handle common OCR character substitutions
+        ocr_replacements = {
+            '0': 'o', 'o': '0', '1': 'l', 'l': 'i', 'i': 'l',
+            'rn': 'm', 'm': 'rn', 'cl': 'd', 'd': 'cl',
+            'u': 'o', 'a': 'e', 'e': 'a'
+        }
+        
+        # Try with OCR corrections
+        corrected_text = text
+        for wrong, correct in ocr_replacements.items():
+            corrected_text = corrected_text.replace(wrong, correct)
+        
+        if keyword in corrected_text or corrected_text in keyword:
+            return True
+        
+        # Calculate simple edit distance for close matches
+        def edit_distance(s1, s2):
+            if len(s1) > len(s2):
+                s1, s2 = s2, s1
+            
+            distances = range(len(s1) + 1)
+            for index2, char2 in enumerate(s2):
+                new_distances = [index2 + 1]
+                for index1, char1 in enumerate(s1):
+                    if char1 == char2:
+                        new_distances.append(distances[index1])
+                    else:
+                        new_distances.append(1 + min(distances[index1], distances[index1 + 1], new_distances[-1]))
+                distances = new_distances
+            return distances[-1]
+        
+        # For longer keywords, allow some edit distance
+        if len(keyword) >= 4:
+            max_distance = max(1, len(keyword) // 3)  # Allow 33% character errors
+            if edit_distance(text, keyword) <= max_distance:
+                return True
+        
+        # Check if text might be a fragment of the keyword
+        if len(text) >= 4 and len(keyword) >= 6:
+            # Check if text is a substring with some errors
+            for i in range(len(keyword) - len(text) + 1):
+                if edit_distance(text, keyword[i:i+len(text)]) <= 1:
+                    return True
+        
+        return False
+
     def find_signature_zone(self, image: np.ndarray, text_detections: list) -> Optional[DetectedZone]:
         """Find the signature zone based on text detection and visual cues (original method)"""
         height, width = image.shape[:2]
 
-        # Look for signature-related keywords
+        # Look for specific signature-related keywords (prioritize actual signature labels)
         signature_keywords = [
-            'signature', 'second party', 'party\'s signature', 'sign', 'signed',
-            'signatory', 'undersigned', 'hereby', 'witness', 'agreement',
-            'contract', 'party', 'name', 'date', 'seal', 'stamp',
-            'توقيع', 'الطرف الثاني'  # Arabic keywords
+            'second party\'s signature', 'party\'s signature', 'signature',
+            'second party', 'signatory', 'signed', 'sign',
+            'توقيع الطرف الثاني', 'توقيع', 'الطرف الثاني'  # Arabic keywords
         ]
 
         candidates = []
+        
+        # Focus search on lower portion where signatures actually appear (bottom 60%)
+        signature_area_start = int(height * 0.4)  # Start from 40% down
+
+        # Debug: Show what text is in the signature area
+        if self.verbose:
+            signature_area_texts = [d for d in text_detections if d['y'] >= signature_area_start]
+            logger.info(f"Signature area starts at y={signature_area_start}, found {len(signature_area_texts)} text elements:")
+            for i, detection in enumerate(signature_area_texts[:10]):  # Show first 10
+                logger.info(f"  {i+1}. y={detection['y']}: '{detection['text']}' (conf: {detection['confidence']})")
 
         for detection in text_detections:
+            # Skip text that appears too high in the document (contract content)
+            if detection['y'] < signature_area_start:
+                continue
+                
             text_lower = detection['text'].lower()
 
-            # Check if text contains signature keywords
+            # Check if text contains signature keywords (with fuzzy matching)
             for keyword in signature_keywords:
-                if keyword in text_lower:
+                if self._fuzzy_match(text_lower, keyword):
                     # Calculate potential zone below this text (improved positioning)
                     zone_start_y = detection['y'] + detection['height'] + 50
 
