@@ -22,6 +22,7 @@ import google.generativeai as genai
 from PIL import Image
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.responses import Response
+from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
 # Configure logging
@@ -819,6 +820,15 @@ class GeminiZoneClassifier:
 
 # Initialize FastAPI app
 app = FastAPI(title="Signature Cropper API", description="API for extracting signatures from contract documents")
+
+# Add CORS middleware to allow cross-origin requests from the web app
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all origins for development
+    allow_credentials=True,
+    allow_methods=["*"],  # Allow all methods (GET, POST, etc.)
+    allow_headers=["*"],  # Allow all headers
+)
 
 # Initialize the classifier with API key from environment
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "AIzaSyDmNcG-gz9PN4zmoq5anCstMqdfhXqJaL0")

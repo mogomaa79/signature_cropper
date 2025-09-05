@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Signature Extractor</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            color: white;
+        }
+
+        .header h1 {
+            font-size: 3rem;
+            font-weight: 300;
+            margin-bottom: 10px;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .header p {
+            font-size: 1.2rem;
+            opacity: 0.9;
+        }
+
+        .upload-section {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            margin-bottom: 40px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+        }
+
+        .upload-area {
+            border: 3px dashed #667eea;
+            border-radius: 15px;
+            padding: 60px 20px;
+            text-align: center;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            position: relative;
+            background: linear-gradient(45deg, #f8f9ff 0%, #f0f2ff 100%);
+        }
+
+        .upload-area:hover {
+            border-color: #764ba2;
+            background: linear-gradient(45deg, #f0f2ff 0%, #e8ebff 100%);
+            transform: translateY(-2px);
+        }
+
+        .upload-area.dragover {
+            border-color: #764ba2;
+            background: linear-gradient(45deg, #e8ebff 0%, #dde1ff 100%);
+            transform: scale(1.02);
+        }
+
+        .upload-icon {
+            font-size: 4rem;
+            color: #667eea;
+            margin-bottom: 20px;
+        }
+
+        .upload-text {
+            font-size: 1.5rem;
+            color: #333;
+            margin-bottom: 10px;
+            font-weight: 500;
+        }
+
+        .upload-subtext {
+            color: #666;
+            font-size: 1rem;
+        }
+
+        .file-input {
+            display: none;
+        }
+
+        .selected-files {
+            margin-top: 30px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .file-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            border-left: 4px solid #667eea;
+        }
+
+        .file-info {
+            display: flex;
+            align-items: center;
+            flex: 1;
+        }
+
+        .file-icon {
+            margin-right: 12px;
+            font-size: 1.2rem;
+        }
+
+        .file-name {
+            font-weight: 500;
+            color: #333;
+        }
+
+        .file-size {
+            color: #666;
+            font-size: 0.9rem;
+            margin-left: 10px;
+        }
+
+        .remove-file {
+            background: #ff4757;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 25px;
+            height: 25px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s;
+        }
+
+        .remove-file:hover {
+            background: #ff3742;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 15px;
+            margin-top: 30px;
+            justify-content: center;
+        }
+
+        .btn {
+            padding: 15px 30px;
+            border: none;
+            border-radius: 10px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-secondary {
+            background: linear-gradient(135deg, #2ed573 0%, #17a2b8 100%);
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(46, 213, 115, 0.4);
+        }
+
+        .btn-secondary:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .progress-section {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            margin-bottom: 40px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            display: none;
+        }
+
+        .progress-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #e9ecef;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 15px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        .progress-text {
+            text-align: center;
+            color: #666;
+            font-size: 1rem;
+        }
+
+        .results-section {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            display: none;
+        }
+
+        .results-title {
+            font-size: 2rem;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+
+        .signature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+
+        .signature-card {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 20px;
+            text-align: center;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            border: 2px solid transparent;
+        }
+
+        .signature-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 30px rgba(0,0,0,0.15);
+            border-color: #667eea;
+        }
+
+        .signature-image {
+            max-width: 100%;
+            max-height: 200px;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            margin-bottom: 15px;
+        }
+
+        .signature-label {
+            font-weight: 600;
+            color: #333;
+            font-size: 1rem;
+            word-break: break-word;
+        }
+
+        .error-message {
+            background: #fff5f5;
+            border: 2px solid #fed7d7;
+            border-radius: 10px;
+            padding: 15px;
+            color: #e53e3e;
+            font-weight: 500;
+            margin-bottom: 15px;
+        }
+
+        .success-message {
+            background: #f0fff4;
+            border: 2px solid #c6f6d5;
+            border-radius: 10px;
+            padding: 15px;
+            color: #22543d;
+            font-weight: 500;
+            margin-bottom: 15px;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .stats {
+            display: flex;
+            justify-content: center;
+            gap: 40px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+        }
+
+        .stat-item {
+            text-align: center;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 15px;
+            color: white;
+            min-width: 120px;
+        }
+
+        .stat-number {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            font-size: 0.9rem;
+            opacity: 0.9;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 2rem;
+            }
+            
+            .upload-section, .results-section {
+                padding: 20px;
+            }
+            
+            .signature-grid {
+                grid-template-columns: 1fr;
+                gap: 20px;
+            }
+            
+            .action-buttons {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            .btn {
+                width: 100%;
+                max-width: 300px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>🖊️ AI Signature Extractor</h1>
+            <p>Upload contracts and automatically extract signature zones with AI precision</p>
+        </div>
+
+        <!-- Upload Section -->
+        <div class="upload-section">
+            <div class="upload-area" id="uploadArea">
+                <div class="upload-icon">📁</div>
+                <div class="upload-text">Drop files here or click to browse</div>
+                <div class="upload-subtext">Support: PDF, JPG, PNG, DOCX (Max 20 files, 10MB each)</div>
+                <input type="file" id="fileInput" class="file-input" multiple accept=".pdf,.jpg,.jpeg,.png,.docx,.doc">
+            </div>
+            
+            <div class="selected-files" id="selectedFiles"></div>
+            
+            <div class="action-buttons">
+                <button class="btn btn-primary" id="processBtn" disabled>
+                    <span id="processText">Extract Signatures</span>
+                </button>
+                <button class="btn btn-secondary" id="downloadBtn" disabled>
+                    Download All (ZIP)
+                </button>
+            </div>
+        </div>
+
+        <!-- Progress Section -->
+        <div class="progress-section" id="progressSection">
+            <div class="progress-title">Processing Documents...</div>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+            <div class="progress-text" id="progressText">Preparing...</div>
+        </div>
+
+        <!-- Results Section -->
+        <div class="results-section" id="resultsSection">
+            <div class="results-title">Extracted Signatures</div>
+            
+            <div class="stats" id="stats">
+                <div class="stat-item">
+                    <div class="stat-number" id="totalFiles">0</div>
+                    <div class="stat-label">Files Processed</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number" id="successCount">0</div>
+                    <div class="stat-label">Signatures Found</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number" id="errorCount">0</div>
+                    <div class="stat-label">Errors</div>
+                </div>
+            </div>
+            
+            <div class="signature-grid" id="signatureGrid"></div>
+        </div>
+    </div>
+
+    <script>
+        class SignatureExtractor {
+            constructor() {
+                this.files = [];
+                this.results = [];
+                this.apiUrl = 'http://203.161.46.120:8000/crop-signature';
+                
+                this.initializeElements();
+                this.setupEventListeners();
+            }
+
+            initializeElements() {
+                this.uploadArea = document.getElementById('uploadArea');
+                this.fileInput = document.getElementById('fileInput');
+                this.selectedFiles = document.getElementById('selectedFiles');
+                this.processBtn = document.getElementById('processBtn');
+                this.downloadBtn = document.getElementById('downloadBtn');
+                this.progressSection = document.getElementById('progressSection');
+                this.progressFill = document.getElementById('progressFill');
+                this.progressText = document.getElementById('progressText');
+                this.resultsSection = document.getElementById('resultsSection');
+                this.signatureGrid = document.getElementById('signatureGrid');
+                this.processText = document.getElementById('processText');
+                this.totalFiles = document.getElementById('totalFiles');
+                this.successCount = document.getElementById('successCount');
+                this.errorCount = document.getElementById('errorCount');
+            }
+
+            setupEventListeners() {
+                // Upload area events
+                this.uploadArea.addEventListener('click', () => this.fileInput.click());
+                this.uploadArea.addEventListener('dragover', this.handleDragOver.bind(this));
+                this.uploadArea.addEventListener('dragleave', this.handleDragLeave.bind(this));
+                this.uploadArea.addEventListener('drop', this.handleDrop.bind(this));
+                
+                // File input
+                this.fileInput.addEventListener('change', this.handleFileSelect.bind(this));
+                
+                // Buttons
+                this.processBtn.addEventListener('click', this.processFiles.bind(this));
+                this.downloadBtn.addEventListener('click', this.downloadZip.bind(this));
+            }
+
+            handleDragOver(e) {
+                e.preventDefault();
+                this.uploadArea.classList.add('dragover');
+            }
+
+            handleDragLeave(e) {
+                e.preventDefault();
+                this.uploadArea.classList.remove('dragover');
+            }
+
+            handleDrop(e) {
+                e.preventDefault();
+                this.uploadArea.classList.remove('dragover');
+                
+                const files = Array.from(e.dataTransfer.files);
+                this.addFiles(files);
+            }
+
+            handleFileSelect(e) {
+                const files = Array.from(e.target.files);
+                this.addFiles(files);
+            }
+
+            addFiles(newFiles) {
+                // Filter valid files and limit to 20 total
+                const validFiles = newFiles.filter(file => {
+                    const validTypes = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png', 
+                                      'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+                    return validTypes.includes(file.type) && file.size <= 10 * 1024 * 1024; // 10MB limit
+                });
+
+                // Add files up to limit of 20
+                const availableSlots = 20 - this.files.length;
+                const filesToAdd = validFiles.slice(0, availableSlots);
+                
+                this.files.push(...filesToAdd);
+                this.updateFileDisplay();
+                this.updateButtons();
+            }
+
+            removeFile(index) {
+                this.files.splice(index, 1);
+                this.updateFileDisplay();
+                this.updateButtons();
+            }
+
+            updateFileDisplay() {
+                this.selectedFiles.innerHTML = '';
+                
+                this.files.forEach((file, index) => {
+                    const fileItem = document.createElement('div');
+                    fileItem.className = 'file-item';
+                    
+                    const fileIcon = this.getFileIcon(file.type);
+                    const fileSize = this.formatFileSize(file.size);
+                    
+                    fileItem.innerHTML = `
+                        <div class="file-info">
+                            <div class="file-icon">${fileIcon}</div>
+                            <div class="file-name">${file.name}</div>
+                            <div class="file-size">${fileSize}</div>
+                        </div>
+                        <button class="remove-file" onclick="app.removeFile(${index})">×</button>
+                    `;
+                    
+                    this.selectedFiles.appendChild(fileItem);
+                });
+            }
+
+            getFileIcon(type) {
+                if (type.includes('pdf')) return '📄';
+                if (type.includes('image')) return '🖼️';
+                if (type.includes('word')) return '📝';
+                return '📁';
+            }
+
+            formatFileSize(bytes) {
+                if (bytes === 0) return '0 Bytes';
+                const k = 1024;
+                const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+                const i = Math.floor(Math.log(bytes) / Math.log(k));
+                return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+            }
+
+            updateButtons() {
+                this.processBtn.disabled = this.files.length === 0;
+                this.downloadBtn.disabled = this.results.length === 0;
+            }
+
+            async processFiles() {
+                if (this.files.length === 0) return;
+
+                this.processBtn.disabled = true;
+                this.downloadBtn.disabled = true;
+                this.results = [];
+                
+                // Show progress section
+                this.progressSection.style.display = 'block';
+                this.resultsSection.style.display = 'none';
+                
+                // Update button text
+                this.processText.innerHTML = '<span class="loading"></span>Processing...';
+                
+                let completed = 0;
+                let successful = 0;
+                let errors = 0;
+                
+                for (let i = 0; i < this.files.length; i++) {
+                    const file = this.files[i];
+                    
+                    try {
+                        this.progressText.textContent = `Processing ${file.name}...`;
+                        
+                        const result = await this.processFile(file);
+                        if (result.success) {
+                            this.results.push(result);
+                            successful++;
+                        } else {
+                            errors++;
+                        }
+                        
+                    } catch (error) {
+                        console.error(`Error processing ${file.name}:`, error);
+                        errors++;
+                    }
+                    
+                    completed++;
+                    const progress = (completed / this.files.length) * 100;
+                    this.progressFill.style.width = `${progress}%`;
+                    this.progressText.textContent = `Processed ${completed} of ${this.files.length} files`;
+                }
+                
+                // Hide progress, show results
+                this.progressSection.style.display = 'none';
+                this.showResults(this.files.length, successful, errors);
+                
+                // Reset button
+                this.processText.textContent = 'Extract Signatures';
+                this.processBtn.disabled = false;
+                this.updateButtons();
+            }
+
+            async processFile(file) {
+                const formData = new FormData();
+                formData.append('file', file);
+                
+                try {
+                    const response = await fetch(this.apiUrl, {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    if (response.ok) {
+                        const blob = await response.blob();
+                        const imageUrl = URL.createObjectURL(blob);
+                        
+                        return {
+                            success: true,
+                            fileName: file.name,
+                            imageUrl: imageUrl,
+                            blob: blob
+                        };
+                    } else {
+                        console.error(`API error for ${file.name}:`, response.status);
+                        return { success: false, fileName: file.name, error: `API Error: ${response.status}` };
+                    }
+                    
+                } catch (error) {
+                    console.error(`Network error for ${file.name}:`, error);
+                    return { success: false, fileName: file.name, error: 'Network Error' };
+                }
+            }
+
+            showResults(total, successful, errors) {
+                // Update stats
+                this.totalFiles.textContent = total;
+                this.successCount.textContent = successful;
+                this.errorCount.textContent = errors;
+                
+                // Clear and populate grid
+                this.signatureGrid.innerHTML = '';
+                
+                this.results.forEach(result => {
+                    const card = document.createElement('div');
+                    card.className = 'signature-card';
+                    
+                    const cleanFileName = result.fileName.replace(/\.[^/.]+$/, "");
+                    
+                    card.innerHTML = `
+                        <img src="${result.imageUrl}" alt="Signature" class="signature-image" 
+                             onclick="window.open('${result.imageUrl}', '_blank')">
+                        <div class="signature-label">${cleanFileName}</div>
+                    `;
+                    
+                    this.signatureGrid.appendChild(card);
+                });
+                
+                // Show results section
+                this.resultsSection.style.display = 'block';
+            }
+
+            async downloadZip() {
+                if (this.results.length === 0) return;
+
+                this.downloadBtn.disabled = true;
+                this.downloadBtn.innerHTML = '<span class="loading"></span>Creating ZIP...';
+                
+                try {
+                    const zip = new JSZip();
+                    
+                    for (const result of this.results) {
+                        const cleanFileName = result.fileName.replace(/\.[^/.]+$/, "");
+                        const signatureFileName = `${cleanFileName}_signature.jpg`;
+                        zip.file(signatureFileName, result.blob);
+                    }
+                    
+                    const content = await zip.generateAsync({ type: 'blob' });
+                    const url = URL.createObjectURL(content);
+                    
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `signatures_${new Date().toISOString().slice(0, 10)}.zip`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                    
+                } catch (error) {
+                    console.error('Error creating ZIP:', error);
+                    alert('Error creating ZIP file. Please try again.');
+                }
+                
+                this.downloadBtn.disabled = false;
+                this.downloadBtn.textContent = 'Download All (ZIP)';
+            }
+        }
+
+        // Initialize the app
+        const app = new SignatureExtractor();
+    </script>
+</body>
+</html>
