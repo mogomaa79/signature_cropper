@@ -227,13 +227,13 @@ class GeminiZoneClassifier:
                 total_pixels = horizontal_stripe.size
                 grey_percentage = grey_pixels / total_pixels
 
-                if grey_percentage > 0.15:  # 15% or more grey pixels
+                if grey_percentage > 0.25:  # 25% or more grey pixels (stricter threshold)
                     if self.verbose:
                         logger.info(f"Grey boundary detected at y={y}, grey%={grey_percentage:.2f}")
                     return y
 
-        # Fallback: use reasonable maximum height
-        max_height = min(150, height - start_y - 20)
+        # Fallback: use larger maximum height for better signature capture
+        max_height = min(200, height - start_y - 20)
         return start_y + max_height
 
     def refine_white_background_boundary(self, image: np.ndarray, zone_x: int, zone_width: int,
@@ -318,9 +318,9 @@ class GeminiZoneClassifier:
 
                 # Check if zone height is reasonable for a signature (50-200 pixels)
                 if 50 <= zone_height <= 200:
-                    # Use original method for horizontal positioning
-                    base_zone_width = min(400, width - 100)  # Max 400px, leave margins
-                    zone_width = int(base_zone_width * 0.7)  # 30% shrinkage
+                    # Use optimized method for horizontal positioning
+                    base_zone_width = min(500, width - 100)  # Max 500px, leave margins
+                    zone_width = int(base_zone_width * 0.8)  # 20% shrinkage (optimized)
                     zone_x = (width - zone_width) // 2  # Centered
 
                     # Apply 5% height reduction as in original method
@@ -440,9 +440,9 @@ class GeminiZoneClassifier:
             # Select best candidate (highest confidence)
             best_pair = max(candidate_pairs, key=lambda x: x['confidence'])
 
-            # Use original method for horizontal positioning
-            base_zone_width = min(400, width - 100)  # Max 400px, leave margins
-            zone_width = int(base_zone_width * 0.7)  # 30% shrinkage
+            # Use optimized method for horizontal positioning
+            base_zone_width = min(500, width - 100)  # Max 500px, leave margins
+            zone_width = int(base_zone_width * 0.8)  # 20% shrinkage (optimized)
             zone_x = (width - zone_width) // 2  # Centered
 
             # Apply 5% height reduction as in original method
@@ -498,9 +498,9 @@ class GeminiZoneClassifier:
             height_reduction = int(zone_height * 0.05)
             zone_height = zone_height - height_reduction
 
-            # Ensure minimum height
-            if zone_height < 50:
-                zone_height = min(100, image.shape[0] - zone_start_y - 20)
+            # Ensure minimum height (improved for better signature capture)
+            if zone_height < 60:
+                zone_height = min(150, image.shape[0] - zone_start_y - 20)
 
             # Bounds checking
             height, width = image.shape[:2]
@@ -529,7 +529,9 @@ class GeminiZoneClassifier:
 
         # Look for signature-related keywords
         signature_keywords = [
-            'signature', 'second party', 'party\'s signature', 'sign',
+            'signature', 'second party', 'party\'s signature', 'sign', 'signed',
+            'signatory', 'undersigned', 'hereby', 'witness', 'agreement',
+            'contract', 'party', 'name', 'date', 'seal', 'stamp',
             'توقيع', 'الطرف الثاني'  # Arabic keywords
         ]
 
@@ -541,15 +543,15 @@ class GeminiZoneClassifier:
             # Check if text contains signature keywords
             for keyword in signature_keywords:
                 if keyword in text_lower:
-                    # Calculate potential zone below this text
-                    zone_start_y = detection['y'] + detection['height'] + 10
+                    # Calculate potential zone below this text (improved positioning)
+                    zone_start_y = detection['y'] + detection['height'] + 50
 
-                    # Estimate zone width and position (centered)
-                    base_zone_width = min(400, width - 100)  # Max 400px, leave margins
+                    # Estimate zone width and position (centered) - improved dimensions
+                    base_zone_width = min(500, width - 100)  # Max 500px, leave margins
                     zone_x = (width - base_zone_width) // 2
 
-                    # **HORIZONTAL SHRINKAGE: Reduce width by 30%**
-                    zone_width = int(base_zone_width * 0.7)  # 30% reduction
+                    # **REDUCED HORIZONTAL SHRINKAGE: Only 20% reduction instead of 30%**
+                    zone_width = int(base_zone_width * 0.8)  # 20% reduction
                     zone_x = (width - zone_width) // 2  # Re-center after shrinkage
 
                     candidates.append({
