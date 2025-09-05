@@ -10,3 +10,6 @@ __pycache__/
 *.pyzzzz
 
 .pdf
+
+*.log
+*.pid

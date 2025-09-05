@@ -103,7 +103,7 @@ class GeminiZoneClassifier:
             page = pdf_document[1]
 
             # Convert to image with high DPI for better OCR
-            mat = fitz.Matrix(2.0, 2.0)  # 2x zoom = 144 DPI
+            mat = fitz.Matrix(3.0, 3.0)  # 3x zoom for good resolution
             pix = page.get_pixmap(matrix=mat)
             img_data = pix.tobytes("ppm")
 
@@ -237,6 +237,65 @@ class GeminiZoneClassifier:
         max_height = min(200, height - start_y - 20)
         return start_y + max_height
 
+    def find_bottom_boundary_from_page_bottom(self, image: np.ndarray, start_y: int, zone_x: int, zone_width: int) -> int:
+        """Find signature bottom by moving upward from page bottom through whitespace until hitting non-white content"""
+        height, width = image.shape[:2]
+        
+        # Start from the very bottom of the signature area
+        search_bottom = min(height - 5, start_y + 800)  # Look within reasonable signature area
+        search_top = max(start_y + 100, search_bottom - 600)  # Don't go too far up
+        
+        if self.verbose:
+            logger.info(f"🔍 Starting from bottom y={search_bottom}, moving upward through whitespace until hitting content")
+        
+        # Scan upward from bottom, continuing while we find whitespace, stop at first non-white content
+        final_bottom_y = start_y + 320  # Fallback marker (will be changed if we find content)
+        
+        for y in range(search_bottom, search_top, -2):  # Scan upward line by line (small steps)
+            # Extract horizontal line
+            line = image[y, zone_x:zone_x + zone_width]
+            
+            # Calculate whitespace percentage 
+            if len(line.shape) == 3:
+                # Color image - check if pixels are very close to white (250+ in all channels)
+                white_pixels = np.sum(np.all(line >= 250, axis=1))
+            else:
+                # Grayscale image - check if pixels are very close to white
+                white_pixels = np.sum(line >= 250)
+            
+            whitespace_percentage = white_pixels / len(line) if len(line) > 0 else 1.0
+            
+            # If this line is NOT mostly whitespace (< 95% white), we found the signature/box boundary
+            if whitespace_percentage < 0.95:  # Less than 95% white means we hit content
+                # This is our signature boundary - add small buffer and stop
+                final_bottom_y = y + 5  # Small buffer below the last content line
+                if self.verbose:
+                    logger.info(f"🎯 Hit non-whitespace at y={y}, whitespace%={whitespace_percentage:.2f}, setting bottom to y={final_bottom_y}")
+                break
+            
+            # Continue through whitespace
+            if self.verbose and y % 20 == 0:  # Log every 20 lines to avoid spam
+                logger.info(f"⬜ Whitespace at y={y}, whitespace%={whitespace_percentage:.2f}")
+        
+        # Only enforce minimum height if smart detection failed to find any boundary
+        min_required_bottom = start_y + 150  # Much smaller minimum - just enough for basic signatures
+        if final_bottom_y == start_y + 320:  # This means we never found content (used fallback)
+            if self.verbose:
+                logger.info(f"⚠️ Smart detection failed, using minimum height fallback y={min_required_bottom}")
+            final_bottom_y = min_required_bottom
+        elif final_bottom_y < start_y + 80:  # Very small signature, add some buffer
+            final_bottom_y = start_y + 80
+            if self.verbose:
+                logger.info(f"📏 Very small signature detected, using minimum buffer y={final_bottom_y}")
+        
+        # Ensure we don't go beyond page bounds
+        final_bottom_y = min(final_bottom_y, height - 5)
+        
+        if self.verbose:
+            logger.info(f"✅ Final signature boundary: y={final_bottom_y} (height: {final_bottom_y - start_y}px)")
+        
+        return final_bottom_y
+
     def refine_white_background_boundary(self, image: np.ndarray, zone_x: int, zone_width: int,
                                        initial_lower_y: int, start_y: int) -> int:
         """Scan from bottom up to ensure we have white background, shrinking zone if needed"""
@@ -261,8 +320,8 @@ class GeminiZoneClassifier:
                     if self.verbose:
                         logger.info(f"Non-white background at y={y}, white%={white_percentage:.2f}, shrinking")
 
-        # Ensure minimum height
-        min_height = 50
+        # Ensure minimum height (increased to 320px for full signature capture)
+        min_height = 100  # Reduced from 320px to trust smart detection more
         if current_lower_y - start_y < min_height:
             current_lower_y = start_y + min_height
             if self.verbose:
@@ -318,7 +377,7 @@ class GeminiZoneClassifier:
                 zone_height = lower_line['y'] - upper_line['y']
 
                 # Check if zone height is reasonable for a signature (50-200 pixels)
-                if 50 <= zone_height <= 200:
+                if 80 <= zone_height <= 500:
                     # Use optimized method for horizontal positioning
                     base_zone_width = min(500, width - 100)  # Max 500px, leave margins
                     zone_width = int(base_zone_width * 0.8)  # 20% shrinkage (optimized)
@@ -328,9 +387,9 @@ class GeminiZoneClassifier:
                     height_reduction = int(zone_height * 0.05)
                     zone_height = zone_height - height_reduction
 
-                    # Ensure minimum height
-                    if zone_height < 50:
-                        zone_height = 80
+                    # Use reasonable minimum height, don't override smart detection
+                    if zone_height < 80:
+                        zone_height = 150
 
                     # Bounds checking
                     zone_start_y = max(0, min(upper_line['y'] + 10, height - zone_height))
@@ -424,7 +483,7 @@ class GeminiZoneClassifier:
                     zone_height = lower_strip['y'] - upper_strip['y']
 
                     # Zone should be reasonable size (between 50 and 200 pixels)
-                    if 50 <= zone_height <= 200:
+                    if 80 <= zone_height <= 500:
                         candidate_pairs.append({
                             'upper_strip': upper_strip,
                             'lower_strip': lower_strip,
@@ -451,9 +510,9 @@ class GeminiZoneClassifier:
             height_reduction = int(zone_height * 0.05)
             zone_height = zone_height - height_reduction
 
-            # Ensure minimum height
-            if zone_height < 50:
-                zone_height = 80
+            # Use reasonable minimum height, don't override smart detection  
+            if zone_height < 80:
+                zone_height = 150
 
             # Bounds checking
             zone_start_y = max(0, min(best_pair['zone_start_y'], height - zone_height))
@@ -488,19 +547,16 @@ class GeminiZoneClassifier:
             zone_x = candidate['zone_x']
             zone_width = candidate['zone_width']
 
-            # Apply the same refinement logic as the main detection
-            initial_zone_end_y = self.detect_grey_boundary(image, zone_start_y, zone_x, zone_width)
-            zone_end_y = self.refine_white_background_boundary(
-                image, zone_x, zone_width, initial_zone_end_y, zone_start_y
-            )
+            # Use smart bottom detection that scans upward from page bottom
+            zone_end_y = self.find_bottom_boundary_from_page_bottom(image, zone_start_y, zone_x, zone_width)
             zone_height = zone_end_y - zone_start_y
 
             # 5% height reduction
             height_reduction = int(zone_height * 0.05)
             zone_height = zone_height - height_reduction
 
-            # Ensure minimum height (improved for better signature capture)
-            if zone_height < 60:
+            # Smart boundary detection provides the height, only use fallback if it failed
+            if zone_height < 50:  # Very small detection, use reasonable minimum
                 zone_height = min(150, image.shape[0] - zone_start_y - 20)
 
             # Bounds checking
